@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="예산, 시간, 취향에 맞는 점심 식당을 스와이프로 고르는 한끼픽 프로토타입"
+    />
+    <title>한끼픽 | 점심 선택을 가볍게</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#" id="home-link" aria-label="한끼픽 처음으로">
+        <span class="brand-mark" aria-hidden="true">ㅎ</span>
+        <span>한끼픽</span>
+      </a>
+      <div class="header-actions">
+        <span class="service-pill"><i></i> 현재 위치 기반 추천</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="view active" id="setup-view" aria-labelledby="setup-title">
+        <div class="setup-copy">
+          <p class="eyebrow">내 주변의 새로운 한 끼</p>
+          <h1 id="setup-title">고민은 짧게,<br /><span>점심은 맛있게.</span></h1>
+          <p class="lead">
+            지금 상황에 딱 맞는 식당만 골라왔어요.<br />카드를 넘기며 오늘의 한 끼를 찾아보세요.
+          </p>
+
+          <div class="feature-list" aria-label="서비스 특징">
+            <div><span>⌖</span><strong>실제 내 위치</strong><small>주변 음식점만 찾아요</small></div>
+            <div><span>←</span><strong>다음 식당</strong><small>마음에 들 때까지 넘겨요</small></div>
+            <div><span>→</span><strong>바로 선택</strong><small>상세정보로 이어져요</small></div>
+          </div>
+        </div>
+
+        <form class="condition-panel" id="condition-form">
+          <div class="panel-heading">
+            <div>
+              <p class="step-label">STEP 1</p>
+              <h2>지금 상황을 알려주세요</h2>
+            </div>
+            <span class="required-note">약 15초</span>
+          </div>
+
+          <div class="form-group location-group">
+            <div class="form-label-row">
+              <label>출발 위치</label>
+              <span id="location-accuracy"></span>
+            </div>
+            <button class="location-button" id="location-button" type="button">
+              <span class="location-icon">⌖</span>
+              <span>
+                <strong id="location-label">현재 위치 불러오기</strong>
+                <small id="location-help">위치 권한을 허용하면 주변 식당을 찾아요</small>
+              </span>
+              <span class="chevron">›</span>
+            </button>
+
+            <p class="location-divider"><span>또는 직접 입력</span></p>
+
+            <div class="location-manual">
+              <input
+                id="location-input"
+                type="text"
+                inputmode="search"
+                autocomplete="off"
+                placeholder="주소나 장소명 (예: 서울시청, 강남역)"
+                aria-label="출발 위치 직접 입력"
+              />
+              <button class="location-search-button" id="location-search" type="button">검색</button>
+            </div>
+            <ul class="location-results" id="location-results" hidden></ul>
+            <p class="location-current" id="location-current" hidden></p>
+          </div>
+
+          <div class="form-row">
+            <fieldset class="form-group">
+              <legend>1인 예산 <small>대표메뉴 기준</small></legend>
+              <div class="segmented" data-choice-group="budget">
+                <button type="button" data-value="10000">1만원</button>
+                <button class="selected" type="button" data-value="15000">1.5만원</button>
+                <button type="button" data-value="20000">2만원</button>
+              </div>
+            </fieldset>
+            <fieldset class="form-group">
+              <legend>남은 시간</legend>
+              <div class="segmented" data-choice-group="time">
+                <button type="button" data-value="40">40분</button>
+                <button class="selected" type="button" data-value="60">60분</button>
+                <button type="button" data-value="90">90분</button>
+              </div>
+            </fieldset>
+          </div>
+
+          <fieldset class="form-group">
+            <legend>오늘 당기는 메뉴 <small>여러 개 선택 가능</small></legend>
+            <div class="chips" id="cuisine-chips">
+              <button class="selected" type="button" data-value="한식">한식</button>
+              <button class="selected" type="button" data-value="일식">일식</button>
+              <button type="button" data-value="중식">중식</button>
+              <button type="button" data-value="양식">양식</button>
+              <button type="button" data-value="분식">분식</button>
+              <button type="button" data-value="샐러드">가벼운 메뉴</button>
+            </div>
+          </fieldset>
+
+          <button class="primary-button" id="start-button" type="submit">
+            <span>내 주변 식당 찾기</span><span class="button-arrow">→</span>
+          </button>
+          <p class="data-source-note" id="data-source-note">
+            현재 위치와 OpenStreetMap의 실제 장소 정보를 사용합니다
+          </p>
+          <div class="connection-error" id="connection-error" role="alert" hidden></div>
+        </form>
+      </section>
+
+      <section class="view" id="deck-view" aria-labelledby="deck-title">
+        <div class="deck-topbar">
+          <div>
+            <p class="step-label">식당 둘러보기</p>
+            <h2 id="deck-title">마음 가는 식당을 골라보세요</h2>
+          </div>
+          <div class="progress-wrap">
+            <span id="deck-progress-label">1 / 6</span>
+            <div class="progress-track"><i id="deck-progress-bar"></i></div>
+          </div>
+        </div>
+
+        <div class="deck-layout">
+          <aside class="criteria-sidebar">
+            <p class="sidebar-title">현재 검색 조건</p>
+            <div class="criteria-list" id="criteria-list"></div>
+            <div class="actual-data-card">
+              <span>✓</span>
+              <div><strong>실제 장소 정보</strong><small>OpenStreetMap에서 불러왔어요</small></div>
+            </div>
+            <button class="text-button" id="restart-setup" type="button">← 조건 다시 고르기</button>
+          </aside>
+
+          <div class="deck-stage-column">
+            <div class="deck-stage" id="deck-stage" aria-live="polite"></div>
+            <div class="swipe-controls" id="swipe-controls">
+              <button class="round-action pass-action" id="pass-button" type="button" aria-label="다음 식당 보기">
+                <span>←</span><small>다음</small>
+              </button>
+              <button class="round-action like-action" id="like-button" type="button" aria-label="현재 식당 선택하기">
+                <span>✓</span><small>선택</small>
+              </button>
+            </div>
+            <p class="keyboard-guide">
+              <kbd>←</kbd> 다음 식당&nbsp;&nbsp; <kbd>→</kbd> 이 식당 선택
+              <span>· 카드를 직접 밀어도 돼요</span>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="result-view" aria-labelledby="result-title">
+        <div class="result-shell">
+          <div class="result-heading">
+            <span class="success-icon">✓</span>
+            <p class="step-label">선택한 식당</p>
+            <h2 id="result-title">점심 메뉴가 정해졌어요!</h2>
+            <p>카카오맵에서 정확한 위치를 확인하고 출발해보세요.</p>
+          </div>
+
+          <article class="chosen-card" id="chosen-card"></article>
+
+          <div class="feedback-card">
+            <div>
+              <p class="step-label">추천 피드백</p>
+              <h3>추천이 얼마나 마음에 들었나요?</h3>
+              <p>평가는 다음 추천을 더 잘 맞추는 데 사용해요.</p>
+            </div>
+            <div class="rating" id="rating" aria-label="만족도 선택">
+              <button type="button" data-rating="1" aria-label="1점">★</button>
+              <button type="button" data-rating="2" aria-label="2점">★</button>
+              <button type="button" data-rating="3" aria-label="3점">★</button>
+              <button type="button" data-rating="4" aria-label="4점">★</button>
+              <button type="button" data-rating="5" aria-label="5점">★</button>
+            </div>
+            <div class="feedback-tags" id="feedback-tags">
+              <button type="button" data-value="거리">거리가 좋아요</button>
+              <button type="button" data-value="가격">가격이 좋아요</button>
+              <button type="button" data-value="취향">취향에 맞아요</button>
+              <button type="button" data-value="설명">추천 이유가 유용해요</button>
+            </div>
+            <button class="primary-button compact" id="save-feedback" type="button" disabled>
+              만족도 저장하기
+            </button>
+          </div>
+
+          <button class="text-button result-restart" id="new-session" type="button">새 조건으로 다시 추천받기</button>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
