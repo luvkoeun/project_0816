@@ -487,7 +487,6 @@
       address: osmAddress(tags),
       lat,
       lng,
-      osmUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
       photoUrl: photo.url,
       photoCredit: photo.credit,
       wikidataId: tags.wikidata || tags["brand:wikidata"] || "",
@@ -896,7 +895,7 @@
         <p>${escapeHTML(item.category)} · ${escapeHTML(displayAddress(item.address))}</p>
         <div class="chosen-meta"><span>${escapeHTML(item.menu)} 약 ${formatPrice(item.price)}</span><span>${item.distance.toLocaleString("ko-KR")}m · 도보 약 ${item.walkMinutes}분</span><span>${escapeHTML(displayPhone(item.phone))}</span></div>
         <p class="chosen-reason">대표메뉴 ${escapeHTML(item.menu)}를 ${formatPrice(item.price)}로 잡아 예산 ${formatPrice(state.criteria.budget)} 조건과 맞춰본 결과예요. 시세 기반 추정치라 카카오맵에서 실제 메뉴판을 꼭 확인해주세요.</p>
-        <div class="chosen-links"><a class="kakao-detail-button" href="${kakaoMapUrl(item)}" target="_blank" rel="noopener">카카오맵에서 메뉴·가격 보기 <span>↗</span></a><a href="${kakaoDirectionsUrl(item)}" target="_blank" rel="noopener">길찾기</a><a href="${item.osmUrl}" target="_blank" rel="noopener">원본 장소</a></div>
+        <div class="chosen-links"><a class="kakao-detail-button" href="${kakaoMapUrl(item)}" target="_blank" rel="noopener">카카오맵에서 메뉴·가격 보기 <span>↗</span></a><a href="${kakaoDirectionsUrl(item)}" target="_blank" rel="noopener">길찾기</a></div>
       </div>`;
     bindPhotoFallback($("#chosen-card"));
     state.rating = 0;
