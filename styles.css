@@ -325,6 +325,7 @@ legend small { margin-left: 5px; color: var(--muted); font-size: 12px; font-weig
   transition: transform .28s ease, opacity .28s ease;
 }
 .restaurant-card:active { cursor: grabbing; }
+.restaurant-card a { cursor: pointer; }
 .restaurant-card.stack-1 { transform: translateY(10px) scale(.97); opacity: .65; z-index: 1; }
 .restaurant-card.stack-2 { transform: translateY(20px) scale(.94); opacity: .3; z-index: 0; }
 .restaurant-card.active-card { z-index: 3; }

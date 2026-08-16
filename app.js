@@ -434,6 +434,7 @@
   const DUPLICATE_RADIUS_M = 200;
   const DECK_SIZE = 30;
   const MAX_SAME_CUISINE_RUN = 2;
+  const DRAG_THRESHOLD_PX = 6;
 
   function nameKeyOf(name) {
     return String(name).toLowerCase().replace(/[\s·.,'"`()\[\]\-_&]/g, "");
@@ -790,29 +791,54 @@
     let startX = 0;
     let startY = 0;
     let dx = 0;
-    let dragging = false;
+    let pointerId = null;
+    let pressing = false;
+    let captured = false;
 
     card.addEventListener("pointerdown", (event) => {
       if (state.animating) return;
-      dragging = true;
-      state.dragging = true;
+      // 링크 위에서 시작한 누름은 드래그로 보지 않습니다. 카드가 포인터를 가로채면
+      // 브라우저가 click을 카드로 돌려버려서 링크가 열리지 않습니다.
+      if (event.target.closest("a, button")) return;
+      pointerId = event.pointerId;
+      pressing = true;
       startX = event.clientX;
       startY = event.clientY;
-      card.setPointerCapture(event.pointerId);
-      card.style.transition = "none";
     });
+
     card.addEventListener("pointermove", (event) => {
-      if (!dragging) return;
+      if (!pressing || event.pointerId !== pointerId) return;
       dx = event.clientX - startX;
-      const dy = (event.clientY - startY) * .18;
-      card.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 20}deg)`;
+      const dy = event.clientY - startY;
+
+      // 실제로 움직인 뒤에야 포인터를 가져옵니다. 그래야 살짝 눌렀다 떼는 조작이 클릭으로 남습니다.
+      if (!captured) {
+        if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+        captured = true;
+        state.dragging = true;
+        card.setPointerCapture(pointerId);
+        card.style.transition = "none";
+      }
+
+      card.style.transform = `translate(${dx}px, ${dy * .18}px) rotate(${dx / 20}deg)`;
       $(".swipe-label.like", card).style.opacity = Math.max(0, Math.min(1, dx / 100));
       $(".swipe-label.pass", card).style.opacity = Math.max(0, Math.min(1, -dx / 100));
     });
+
     const release = () => {
-      if (!dragging) return;
-      dragging = false;
+      if (!pressing) return;
+      const dragged = captured;
+      pressing = false;
+      captured = false;
       state.dragging = false;
+      pointerId = null;
+
+      // 움직이지 않았다면 카드를 건드리지 않고 클릭이 그대로 진행되게 둡니다.
+      if (!dragged) {
+        dx = 0;
+        return;
+      }
+
       card.style.transition = "";
       if (Math.abs(dx) >= 85) {
         swipeDecision(dx > 0 ? "choose" : "pass", "drag");
