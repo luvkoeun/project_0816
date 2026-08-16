@@ -72,16 +72,27 @@ OpenStreetMap에는 식당별 메뉴 가격 태그가 없습니다. 그래서 �
 
 1. [supabase.com](https://supabase.com)에서 프로젝트를 만듭니다.
 2. 대시보드 > **SQL Editor** 에 [`supabase/schema.sql`](./supabase/schema.sql) 전체를 붙여넣고 실행합니다. 테이블 4개와 RLS 정책, 분석용 뷰가 만들어집니다.
-3. 대시보드 > **Project Settings > API** 에서 두 값을 복사해 [`supabase-config.js`](./supabase-config.js)에 채웁니다.
+3. 대시보드 > **Project Settings > API** 에서 **Project URL** 과 **anon public** 키를 복사합니다.
+4. 아래 [Vercel 배포](#vercel-배포)의 환경변수에 넣습니다. 로컬에서 잠깐 붙여볼 때만 [`supabase-config.js`](./supabase-config.js)에 직접 채우세요.
 
-```js
-window.HANKKIPICK_SUPABASE = {
-  url: "https://<프로젝트>.supabase.co",
-  anonKey: "<anon public 키>",
-};
-```
+설정하지 않으면 앱은 그대로 동작하고 기록만 `localStorage`에 남습니다. 별도 라이브러리 없이 Supabase REST 엔드포인트로 바로 넣기 때문에 설치할 것이 없습니다.
 
-비워두면 앱은 그대로 동작하고 기록만 `localStorage`에 남습니다. 별도 라이브러리 없이 Supabase REST 엔드포인트로 바로 넣기 때문에 설치할 것이 없습니다.
+### Vercel 배포
+
+정적 사이트라 환경변수가 브라우저로 자동으로 넘어가지 않습니다. 그래서 배포할 때 [`scripts/build-config.mjs`](./scripts/build-config.mjs)가 환경변수를 읽어 `supabase-config.js`를 만들어 넣습니다. [`vercel.json`](./vercel.json)에 이미 연결돼 있어 따로 설정할 것은 없습니다.
+
+Vercel 프로젝트 > **Settings > Environment Variables** 에 두 개를 추가합니다.
+
+| 이름 | 값 |
+| --- | --- |
+| `SUPABASE_URL` | `https://<프로젝트>.supabase.co` |
+| `SUPABASE_ANON_KEY` | anon public 키 |
+
+`NEXT_PUBLIC_` 접두사가 붙은 이름도 함께 인식합니다. 값을 바꾼 뒤에는 **재배포해야** 반영됩니다. 빌드 때 새로 굽는 값이라 기존 배포에는 옛 값이 남아 있습니다.
+
+빌드 로그에 `[supabase-config] 사용 기록 수집 켬 — https://...` 이 찍히면 정상입니다. 환경변수가 없으면 수집을 끈 채로 배포되고, 한쪽만 설정돼 있으면 실수로 보고 빌드를 실패시킵니다.
+
+> 이 파일은 브라우저로 그대로 내려가므로, 빌드 스크립트가 `service_role`이나 `sb_secret_` 키가 들어오면 배포를 중단시킵니다. 반드시 anon 키를 넣으세요.
 
 ### 쌓이는 표
 
