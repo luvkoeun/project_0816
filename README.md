@@ -8,7 +8,7 @@
 
 1. 출발 위치를 정합니다. **현재 위치 불러오기**를 누르거나, 아래 입력칸에 주소·장소명을 넣고 **검색**해 고릅니다.
 2. 예산, 남은 시간, 당기는 메뉴를 고르고 **내 주변 식당 찾기**를 누릅니다.
-3. 별도 API 키나 `config.js` 설정은 필요하지 않습니다.
+3. 식당을 찾는 데는 API 키가 필요하지 않습니다. 사용 기록을 DB에 모으려면 아래 [사용 기록 수집](#사용-기록-수집-supabase)을 설정하세요.
 
 출발 위치를 직접 입력할 수 있으므로 접속하자마자 위치 권한을 묻지 않습니다.
 
@@ -64,13 +64,63 @@ OpenStreetMap에는 식당별 메뉴 가격 태그가 없습니다. 그래서 �
 
 세 곳 모두 없으면 메뉴 종류별 이모지 카드로 표시합니다. 국내 개인 식당은 이 태그가 거의 없어 실제로 사진이 붙는 곳은 주로 체인점입니다. 모든 식당의 음식 사진이 필요하면 카카오·네이버 플레이스 API가 필요합니다. 사진에는 출처 배지를 함께 표시하고, 불러오지 못하면 조용히 이모지로 돌아갑니다.
 
-## 분석용 익명 기록
+## 사용 기록 수집 (Supabase)
 
-가설이나 KPI는 서비스 화면에 표시하지 않습니다. 발표 준비에 필요한 넘김 횟수, 선택 횟수, 선택 시간, 만족도만 브라우저 `localStorage`에 저장합니다. 위치 좌표와 식당 이름은 저장하지 않습니다.
+**"식당이 몇 개 떴고, 사용자가 몇 번 넘긴 뒤에 선택을 눌렀는가"** 를 모으는 것이 목적입니다.
+
+### 설정
+
+1. [supabase.com](https://supabase.com)에서 프로젝트를 만듭니다.
+2. 대시보드 > **SQL Editor** 에 [`supabase/schema.sql`](./supabase/schema.sql) 전체를 붙여넣고 실행합니다. 테이블 4개와 RLS 정책, 분석용 뷰가 만들어집니다.
+3. 대시보드 > **Project Settings > API** 에서 두 값을 복사해 [`supabase-config.js`](./supabase-config.js)에 채웁니다.
 
 ```js
-HankkiPick.exportUsage() // 기록 확인
-HankkiPick.clearUsage()  // 기록 초기화
+window.HANKKIPICK_SUPABASE = {
+  url: "https://<프로젝트>.supabase.co",
+  anonKey: "<anon public 키>",
+};
+```
+
+비워두면 앱은 그대로 동작하고 기록만 `localStorage`에 남습니다. 별도 라이브러리 없이 Supabase REST 엔드포인트로 바로 넣기 때문에 설치할 것이 없습니다.
+
+### 쌓이는 표
+
+| 표 | 언제 | 핵심 컬럼 |
+| --- | --- | --- |
+| `sessions` | 검색 한 번마다 | `deck_size`(뜬 식당 수), 예산·시간·메뉴 조건 |
+| `swipes` | 카드를 넘기거나 고를 때마다 | `deck_index`, `action`, `input`(드래그/버튼/키보드) |
+| `picks` | 선택을 누를 때 | **`swipes_before`(몇 번 넘기고 골랐는지)**, `decision_ms` |
+| `feedback` | 만족도를 저장할 때 | `rating`, `tags` |
+
+가장 궁금한 값은 한 줄로 나옵니다.
+
+```sql
+select round(avg(swipes_before), 1) as 평균_넘김수,
+       percentile_cont(0.5) within group (order by swipes_before) as 중앙값
+from public.picks;
+```
+
+`session_summary` 뷰가 네 표를 이어 붙여 두었고, 자주 쓸 질의는 `schema.sql` 아래쪽에 주석으로 모아 두었습니다.
+
+### 무엇을 보내고 무엇을 안 보내는가
+
+보내는 값: 검색 조건, 뜬 식당 수, 넘긴 횟수, 선택까지 걸린 시간, 고른 식당의 이름·종류·추정가·거리, 만족도.
+
+보내지 않는 값: **위도·경도, 주소, 검색어, 로그인 정보.** `session_id`는 검색할 때마다 새로 만드는 1회용 UUID라 사람과 이어지지 않고, 방문자를 식별하는 값은 저장하지 않습니다.
+
+> 이전 버전은 식당 이름조차 남기지 않았지만, 어떤 식당이 실제로 선택되는지 보려면 필요해서 이름과 종류를 보냅니다. 이는 가게에 대한 공개 정보이며 사용자 개인정보가 아닙니다.
+
+`anonKey`는 브라우저에 공개되는 것을 전제로 만들어진 키입니다. RLS 정책이 INSERT만 허용하므로 이 키로는 쌓인 기록을 읽거나 지울 수 없습니다. 분석은 대시보드나 `service_role` 키로 하세요.
+
+### 실패해도 앱은 멈추지 않습니다
+
+전송에 실패한 기록은 `localStorage` 큐에 남았다가 다음 이벤트나 다음 접속 때 다시 올라갑니다. 오프라인에서 쓴 기록도 나중에 복구됩니다. 형식이 잘못돼 계속 거절되는(400대) 기록은 큐가 막히지 않도록 버립니다.
+
+```js
+HankkiPick.remoteStatus() // 연결 여부와 대기 중인 기록 수
+HankkiPick.flushRemote()  // 지금 바로 전송 시도
+HankkiPick.exportUsage()  // 브라우저에 남은 기록 확인
+HankkiPick.clearUsage()   // 브라우저 기록 초기화
 ```
 
 장소 검색은 OpenStreetMap 데이터를 사용합니다. © OpenStreetMap contributors.

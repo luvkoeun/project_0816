@@ -9,11 +9,16 @@
   const WIKIDATA_ENDPOINT = "https://www.wikidata.org/w/api.php";
   const COMMONS_FILE_URL = "https://commons.wikimedia.org/wiki/Special:FilePath/";
 
+  const PENDING_KEY = "hankkipick_pending_v1";
+  const PENDING_LIMIT = 300;
+
   const state = {
     criteria: { budget: 15000, time: 60, cuisines: ["한식", "일식"] },
     location: null,
     deck: [],
     index: 0,
+    sessionId: null,
+    swipes: 0,
     startedAt: null,
     chosen: null,
     rating: 0,
@@ -51,6 +56,117 @@
     localStorage.setItem(USAGE_KEY, JSON.stringify(usage));
   }
 
+  // ---------------------------------------------------------------------------
+  // Supabase 사용 기록
+  // supabase-config.js 를 채우면 켜지고, 비어 있으면 조용히 localStorage만 씁니다.
+  // 라이브러리 없이 PostgREST 엔드포인트로 바로 INSERT 합니다.
+  // ---------------------------------------------------------------------------
+  const supabaseConfig = window.HANKKIPICK_SUPABASE || {};
+
+  function analyticsEnabled() {
+    return Boolean(supabaseConfig.url && supabaseConfig.anonKey);
+  }
+
+  function newSessionId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    // file:// 처럼 randomUUID를 못 쓰는 환경을 위한 대체 구현입니다.
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  function loadPending() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PENDING_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  let pending = loadPending();
+  let flushing = false;
+
+  function savePending() {
+    // 오래 쌓이면 앞쪽부터 버립니다. 기록 때문에 저장소가 가득 차면 안 됩니다.
+    pending = pending.slice(-PENDING_LIMIT);
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+    } catch {
+      pending = [];
+    }
+  }
+
+  async function insertRows(table, rows) {
+    const response = await fetch(`${supabaseConfig.url}/rest/v1/${table}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: supabaseConfig.anonKey,
+        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(rows),
+      keepalive: true,
+    });
+    if (response.ok) return;
+    const error = new Error(`${table} ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  async function flushPending() {
+    if (flushing || !analyticsEnabled() || !pending.length) return;
+    flushing = true;
+    try {
+      // sessions가 swipes·picks보다 먼저 들어가야 외래키가 맞으므로 순서를 지킵니다.
+      // 같은 테이블이 연속으로 있으면 한 번에 묶어 보냅니다.
+      while (pending.length) {
+        const { table } = pending[0];
+        const batch = [];
+        while (pending.length && pending[0].table === table) batch.push(pending.shift().row);
+        try {
+          await insertRows(table, batch);
+        } catch (error) {
+          // 400대는 몇 번을 보내도 같은 이유로 거절당합니다. 큐가 영영 막히지 않도록 버리고 넘어갑니다.
+          // 네트워크 오류나 500대는 되돌려 놓고 다음 기회에 다시 시도합니다.
+          const permanent = error.status >= 400 && error.status < 500 && error.status !== 429;
+          if (!permanent) {
+            pending = batch.map((row) => ({ table, row })).concat(pending);
+            throw error;
+          }
+        }
+        savePending();
+      }
+    } catch {
+      // 다음 이벤트나 다음 접속 때 다시 보냅니다. 실패해도 앱 동작에는 영향이 없습니다.
+    } finally {
+      savePending();
+      flushing = false;
+    }
+  }
+
+  function queueRow(table, row) {
+    if (!analyticsEnabled()) return;
+    pending.push({ table, row });
+    savePending();
+    flushPending();
+  }
+
+  // 카드에서 기록으로 넘길 값만 추립니다. 좌표와 주소는 보내지 않습니다.
+  function restaurantColumns(restaurant) {
+    return {
+      restaurant_id: restaurant.id,
+      restaurant_name: restaurant.name,
+      cuisine: restaurant.cuisine,
+      price: restaurant.price,
+      distance_m: restaurant.distance,
+      within_budget: withinBudget(restaurant),
+    };
+  }
+
   // 화면에는 분석 도구를 노출하지 않지만, 팀이 콘솔에서 익명 사용 기록을 꺼낼 수 있습니다.
   window.HankkiPick = {
     exportUsage: () => JSON.parse(JSON.stringify(usage)),
@@ -58,6 +174,12 @@
       usage = { sessions: 0, passes: 0, selections: 0, feedback: [], events: [] };
       localStorage.setItem(USAGE_KEY, JSON.stringify(usage));
     },
+    remoteStatus: () => ({
+      enabled: analyticsEnabled(),
+      url: supabaseConfig.url || "(미설정)",
+      pending: pending.length,
+    }),
+    flushRemote: () => flushPending(),
   };
 
   function escapeHTML(value) {
@@ -662,6 +784,8 @@
 
       state.deck = restaurants;
       state.index = 0;
+      state.sessionId = newSessionId();
+      state.swipes = 0;
       state.startedAt = Date.now();
       state.chosen = null;
       state.rating = 0;
@@ -671,6 +795,16 @@
       recordEvent("session_started", {
         criteria: { ...state.criteria },
         resultCount: restaurants.length,
+      });
+      queueRow("sessions", {
+        id: state.sessionId,
+        deck_size: restaurants.length,
+        budget: state.criteria.budget,
+        time_limit: state.criteria.time,
+        radius_m: searchRadius(),
+        cuisines: state.criteria.cuisines,
+        location_source: state.location.source,
+        app_version: SERVICE_VERSION,
       });
       renderCriteria();
       renderDeck();
@@ -859,8 +993,17 @@
     state.animating = true;
     card?.classList.add(action === "choose" ? "fly-right" : "fly-left");
 
+    queueRow("swipes", {
+      session_id: state.sessionId,
+      deck_index: state.index,
+      action,
+      input,
+      ...restaurantColumns(restaurant),
+    });
+
     if (action === "pass") {
       usage.passes += 1;
+      state.swipes += 1;
       recordEvent("restaurant_passed", { restaurantId: restaurant.id, input });
       setTimeout(() => {
         state.index += 1;
@@ -874,6 +1017,15 @@
     state.chosen = restaurant;
     const decisionMs = Date.now() - state.startedAt;
     recordEvent("restaurant_selected", { restaurantId: restaurant.id, input, decisionMs });
+    queueRow("picks", {
+      session_id: state.sessionId,
+      swipes_before: state.swipes,
+      deck_index: state.index,
+      deck_size: state.deck.length,
+      decision_ms: decisionMs,
+      input,
+      ...restaurantColumns(restaurant),
+    });
     setTimeout(() => {
       state.animating = false;
       renderResult();
@@ -923,6 +1075,11 @@
     usage.feedback.push({ restaurantId: state.chosen.id, rating: state.rating, tags: [...state.feedbackTags], at: Date.now() });
     usage.feedback = usage.feedback.slice(-100);
     recordEvent("feedback_saved", { restaurantId: state.chosen.id, rating: state.rating, tags: [...state.feedbackTags] });
+    queueRow("feedback", {
+      session_id: state.sessionId,
+      rating: state.rating,
+      tags: [...state.feedbackTags],
+    });
     $("#save-feedback").disabled = true;
     $("#save-feedback").textContent = "저장 완료 ✓";
     showToast("평가를 저장했어요. 다음 추천에 반영할게요.");
@@ -972,6 +1129,9 @@
     bindEvents();
     // 출발 위치를 직접 고를 수 있으므로 접속하자마자 위치 권한을 묻지 않습니다.
     $("#data-source-note").textContent = "OpenStreetMap 실제 장소 데이터 · 가격은 대표메뉴 시세 기준 추정치";
+    // 지난 접속에서 못 보낸 기록이 있으면 먼저 정리합니다.
+    flushPending();
+    window.addEventListener("pagehide", flushPending);
   }
 
   init();
