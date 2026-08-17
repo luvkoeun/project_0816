@@ -62,9 +62,25 @@
   // 라이브러리 없이 PostgREST 엔드포인트로 바로 INSERT 합니다.
   // ---------------------------------------------------------------------------
   const supabaseConfig = window.HANKKIPICK_SUPABASE || {};
+  const DIAGNOSTIC_TAG = "__diagnostic__";
+
+  // 환경변수에 끝 슬래시가 섞여 들어오면 //rest/v1 로 요청이 나가 404가 납니다.
+  const supabaseUrl = String(supabaseConfig.url || "").trim().replace(/\/+$/, "");
+  const supabaseKey = String(supabaseConfig.anonKey || "").trim();
 
   function analyticsEnabled() {
-    return Boolean(supabaseConfig.url && supabaseConfig.anonKey);
+    return Boolean(supabaseUrl && supabaseKey);
+  }
+
+  // 실패했을 때 무엇을 고쳐야 하는지 바로 알 수 있게 상태코드를 말로 옮깁니다.
+  function describeStatus(status) {
+    if (!status) return "서버에 닿지 못했습니다. URL이 맞는지, Supabase 프로젝트가 일시정지 상태는 아닌지 확인하세요.";
+    if (status === 404) return "표가 없습니다. supabase/schema.sql 전체를 SQL Editor에서 실행하세요.";
+    if (status === 401) return "키가 거부됐습니다. Project Settings > API 의 anon public 키가 맞는지 확인하세요.";
+    if (status === 403) return "RLS 정책에 막혔습니다. schema.sql 의 정책 부분을 다시 실행하세요.";
+    if (status === 400) return "보낸 값이 표 구조와 맞지 않습니다.";
+    if (status === 429) return "요청이 많아 잠시 뒤 다시 보냅니다.";
+    return "서버 오류입니다. 잠시 뒤 다시 보냅니다.";
   }
 
   function newSessionId() {
@@ -100,12 +116,12 @@
   }
 
   async function insertRows(table, rows) {
-    const response = await fetch(`${supabaseConfig.url}/rest/v1/${table}`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: supabaseConfig.anonKey,
-        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
         Prefer: "return=minimal",
       },
       body: JSON.stringify(rows),
@@ -133,6 +149,13 @@
           // 400대는 몇 번을 보내도 같은 이유로 거절당합니다. 큐가 영영 막히지 않도록 버리고 넘어갑니다.
           // 네트워크 오류나 500대는 되돌려 놓고 다음 기회에 다시 시도합니다.
           const permanent = error.status >= 400 && error.status < 500 && error.status !== 429;
+          // 조용히 버리면 왜 기록이 안 쌓이는지 알 수 없으므로 이유는 남깁니다.
+          console.warn(
+            `[한끼픽] ${table} 기록 ${batch.length}건 전송 실패 (${error.status || "network"})`
+            + `\n  ${describeStatus(error.status)}`
+            + `\n  ${permanent ? "이번 기록은 버립니다." : "큐에 남겨 두고 다시 시도합니다."}`
+            + "\n  자세히 보려면 콘솔에서 HankkiPick.testRemote() 를 실행하세요.",
+          );
           if (!permanent) {
             pending = batch.map((row) => ({ table, row })).concat(pending);
             throw error;
@@ -167,6 +190,58 @@
     };
   }
 
+  // 기록이 안 쌓일 때 원인을 한 번에 짚어 주는 진단입니다.
+  // 읽기 한 번으로 표와 키를 확인하고, 마지막에 실제로 한 줄을 넣어 쓰기까지 확인합니다.
+  async function testRemote() {
+    const report = (ok, message, hint = "") => {
+      console[ok ? "log" : "warn"](`[한끼픽 진단] ${message}${hint ? `\n  → ${hint}` : ""}`);
+      return { ok, message, hint };
+    };
+
+    if (!analyticsEnabled()) {
+      return report(false, "설정이 비어 있어 아무것도 보내지 않는 상태입니다.",
+        "Vercel 환경변수 SUPABASE_URL / SUPABASE_ANON_KEY 를 넣고 재배포하세요. "
+        + "배포주소/supabase-config.js 를 열면 실제로 실린 값을 볼 수 있습니다.");
+    }
+    if (!/^https:\/\/[^\s/]+$/i.test(supabaseUrl)) {
+      return report(false, `URL 형태가 이상합니다: ${supabaseUrl}`,
+        "https://<프로젝트>.supabase.co 형태여야 합니다.");
+    }
+
+    let response;
+    try {
+      response = await fetch(`${supabaseUrl}/rest/v1/sessions?select=id&limit=1`, {
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      });
+    } catch {
+      return report(false, "서버에 닿지 못했습니다.",
+        "URL 오타이거나 Supabase 프로젝트가 일시정지(Paused) 상태일 수 있습니다.");
+    }
+    if (!response.ok) {
+      return report(false, `표를 확인하지 못했습니다 (${response.status}).`, describeStatus(response.status));
+    }
+
+    // 표와 키는 정상입니다. 남은 것은 INSERT 권한이라 실제로 한 줄 넣어 봅니다.
+    try {
+      await insertRows("sessions", [{
+        id: newSessionId(),
+        deck_size: 0,
+        budget: 0,
+        time_limit: 0,
+        radius_m: 0,
+        cuisines: [],
+        location_source: "manual",
+        app_version: DIAGNOSTIC_TAG,
+      }]);
+    } catch (error) {
+      return report(false, `쓰기에 실패했습니다 (${error.status || "network"}).`, describeStatus(error.status));
+    }
+
+    return report(true, "정상입니다. 표·키·쓰기 권한 모두 확인했습니다.",
+      "확인용으로 sessions 에 한 줄 넣었습니다. 지우려면 SQL Editor에서: "
+      + `delete from public.sessions where app_version = '${DIAGNOSTIC_TAG}';`);
+  }
+
   // 화면에는 분석 도구를 노출하지 않지만, 팀이 콘솔에서 익명 사용 기록을 꺼낼 수 있습니다.
   window.HankkiPick = {
     exportUsage: () => JSON.parse(JSON.stringify(usage)),
@@ -176,10 +251,12 @@
     },
     remoteStatus: () => ({
       enabled: analyticsEnabled(),
-      url: supabaseConfig.url || "(미설정)",
+      url: supabaseUrl || "(미설정)",
+      keyTail: supabaseKey ? `…${supabaseKey.slice(-6)}` : "(미설정)",
       pending: pending.length,
     }),
     flushRemote: () => flushPending(),
+    testRemote,
   };
 
   function escapeHTML(value) {

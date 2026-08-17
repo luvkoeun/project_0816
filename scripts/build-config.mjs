@@ -17,7 +17,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TARGET = join(ROOT, "supabase-config.js");
 
-const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+// 끝 슬래시가 붙어 오면 요청이 //rest/v1 로 나가 404가 나므로 여기서 떼어 둡니다.
+const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
 function fail(message) {

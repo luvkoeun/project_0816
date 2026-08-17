@@ -128,11 +128,38 @@ from public.picks;
 전송에 실패한 기록은 `localStorage` 큐에 남았다가 다음 이벤트나 다음 접속 때 다시 올라갑니다. 오프라인에서 쓴 기록도 나중에 복구됩니다. 형식이 잘못돼 계속 거절되는(400대) 기록은 큐가 막히지 않도록 버립니다.
 
 ```js
+HankkiPick.testRemote()   // 왜 안 쌓이는지 진단 (아래 참고)
 HankkiPick.remoteStatus() // 연결 여부와 대기 중인 기록 수
 HankkiPick.flushRemote()  // 지금 바로 전송 시도
 HankkiPick.exportUsage()  // 브라우저에 남은 기록 확인
 HankkiPick.clearUsage()   // 브라우저 기록 초기화
 ```
+
+### 기록이 안 쌓일 때
+
+배포한 사이트에서 F12 → Console 에 아래를 입력하면 원인을 짚어 줍니다.
+
+```js
+await HankkiPick.testRemote()
+```
+
+설정 → URL 형태 → 서버 연결 → 표 존재 → 키 → 쓰기 권한 순서로 확인하고, 막힌 지점과 해결 방법을 한국어로 알려줍니다.
+
+| 진단 결과 | 해결 |
+| --- | --- |
+| 설정이 비어 있음 | Vercel 환경변수를 넣고 **재배포**. 값이 실렸는지는 `배포주소/supabase-config.js` 를 열어 확인 |
+| 서버에 닿지 못함 | URL 오타이거나 Supabase 프로젝트가 **Paused** 상태 |
+| 표가 없음 (404) | `supabase/schema.sql` 전체를 SQL Editor에서 실행 |
+| 키가 거부됨 (401) | Project Settings > API 의 **anon public** 키인지 확인 |
+| RLS 차단 (403) | `schema.sql` 의 정책 부분을 다시 실행 (여러 번 실행해도 안전) |
+
+마지막 단계에서 실제로 `sessions` 에 한 줄을 넣어 쓰기 권한까지 확인합니다. 이 확인용 줄은 `app_version` 이 `__diagnostic__` 이라 아래로 지울 수 있습니다.
+
+```sql
+delete from public.sessions where app_version = '__diagnostic__';
+```
+
+전송이 실패하면 콘솔에도 이유가 경고로 남습니다. 예전에는 조용히 넘어가서 원인을 알 수 없었습니다.
 
 장소 검색은 OpenStreetMap 데이터를 사용합니다. © OpenStreetMap contributors.
 
