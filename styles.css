@@ -293,7 +293,7 @@ legend small { margin-left: 5px; color: var(--muted); font-size: 12px; font-weig
 .progress-wrap span { color: var(--muted); font-size: 13px; font-weight: 500; }
 .progress-track { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 9999px; background: var(--hairline-soft); }
 .progress-track i { display: block; width: 16%; height: 100%; border-radius: inherit; background: var(--primary); transition: width .3s ease; }
-.deck-layout { display: grid; grid-template-columns: 240px minmax(400px, 520px); justify-content: center; gap: clamp(32px, 6vw, 72px); align-items: start; }
+.deck-layout { display: grid; grid-template-columns: 240px minmax(520px, 700px); justify-content: center; gap: clamp(28px, 4vw, 56px); align-items: start; }
 
 .criteria-sidebar { margin-top: 16px; padding: 24px; border: 1px solid var(--hairline); border-radius: 14px; background: var(--canvas); }
 .sidebar-title { margin: 0; font-size: 16px; font-weight: 600; }
@@ -310,57 +310,89 @@ legend small { margin-left: 5px; color: var(--muted); font-size: 12px; font-weig
 .criteria-sidebar .text-button { margin-top: 16px; }
 
 .deck-stage-column { min-width: 0; }
-.deck-stage { position: relative; height: 560px; perspective: 1200px; }
+.deck-stage { position: relative; min-height: 520px; }
+.card-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+  touch-action: none;
+  transition: transform .28s ease, opacity .28s ease;
+}
+.card-pair.single { grid-template-columns: minmax(0, 1fr); max-width: 340px; margin: 0 auto; }
+.card-pair.fly-right { transform: translate(60%, 24px) rotate(4deg); opacity: 0; }
+.card-pair.fly-left { transform: translate(-60%, 24px) rotate(-4deg); opacity: 0; }
+
 .restaurant-card {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  min-width: 0;
   overflow: hidden;
+  border: 1px solid var(--hairline-soft);
   border-radius: 14px;
   background: var(--canvas);
   box-shadow: var(--shadow);
-  cursor: grab;
+  cursor: pointer;
   user-select: none;
-  touch-action: none;
-  transform-origin: 50% 90%;
-  transition: transform .28s ease, opacity .28s ease;
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, opacity .28s ease;
 }
-.restaurant-card:active { cursor: grabbing; }
+.restaurant-card:hover, .restaurant-card:focus-visible { border-color: var(--ink); transform: translateY(-4px); }
+.restaurant-card:hover .pick-cta, .restaurant-card:focus-visible .pick-cta { color: var(--canvas); background: var(--primary); }
 .restaurant-card a { cursor: pointer; }
-.restaurant-card.stack-1 { transform: translateY(10px) scale(.97); opacity: .65; z-index: 1; }
-.restaurant-card.stack-2 { transform: translateY(20px) scale(.94); opacity: .3; z-index: 0; }
-.restaurant-card.active-card { z-index: 3; }
-.restaurant-card.fly-right { transform: translate(125%, 20px) rotate(14deg) !important; opacity: 0; }
-.restaurant-card.fly-left { transform: translate(-125%, 20px) rotate(-14deg) !important; opacity: 0; }
-.food-visual { position: relative; height: 250px; overflow: hidden; display: grid; place-items: center; background: var(--card-color, #f7f7f7); }
+.restaurant-card.card-chosen { border-color: var(--primary); transform: translateY(-8px) scale(1.02); }
+.restaurant-card.card-dropped { opacity: .25; transform: scale(.96); }
+
+.pick-hint {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  left: 12px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink);
+  background: rgba(255, 255, 255, .92);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+.pick-cta {
+  display: block;
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  transition: .18s ease;
+}
+.food-visual { position: relative; height: 150px; overflow: hidden; display: grid; place-items: center; background: var(--card-color, #f7f7f7); }
 .food-visual::before, .food-visual::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255, 255, 255, .28); }
-.food-visual::before { width: 260px; height: 260px; left: -80px; top: -120px; }
-.food-visual::after { width: 170px; height: 170px; right: -45px; bottom: -75px; }
-.food-emoji { position: relative; z-index: 1; font-size: 104px; filter: drop-shadow(0 14px 18px rgba(0, 0, 0, .14)); transform: rotate(-4deg); }
+.food-visual::before { width: 200px; height: 200px; left: -70px; top: -100px; }
+.food-visual::after { width: 130px; height: 130px; right: -40px; bottom: -60px; }
+.food-emoji { position: relative; z-index: 1; font-size: 64px; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .14)); transform: rotate(-4deg); }
 .food-photo, .chosen-photo { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s ease; }
 .food-photo.is-loaded, .chosen-photo.is-loaded { opacity: 1; }
 .food-photo.is-loaded ~ .food-emoji, .chosen-photo.is-loaded ~ span[aria-hidden] { visibility: hidden; }
 .photo-credit { position: absolute; z-index: 3; right: 12px; bottom: 12px; padding: 4px 9px; border-radius: 9999px; color: var(--canvas); background: rgba(0, 0, 0, .55); font-size: 10px; font-weight: 500; opacity: 0; transition: opacity .3s ease; }
 .food-photo.is-loaded ~ .photo-credit, .chosen-photo.is-loaded ~ .photo-credit { opacity: 1; }
-.source-badge { position: absolute; z-index: 3; top: 16px; left: 16px; padding: 5px 10px; border-radius: 9999px; color: var(--ink); background: rgba(255, 255, 255, .92); font-size: 11px; font-weight: 600; box-shadow: var(--shadow); }
-.swipe-label { position: absolute; z-index: 4; top: 102px; padding: 7px 12px; border: 3px solid; border-radius: 8px; opacity: 0; font-size: 22px; font-weight: 700; letter-spacing: .06em; }
-.swipe-label.like { right: 28px; color: var(--canvas); border-color: var(--canvas); transform: rotate(9deg); }
-.swipe-label.pass { left: 28px; color: var(--canvas); border-color: var(--canvas); transform: rotate(-9deg); }
-.card-body { padding: 24px; }
-.card-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-.card-title-row h3 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.18; letter-spacing: -.02em; }
+.card-body { padding: 18px; }
+.card-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.card-title-row h3 { margin: 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; }
 .category { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
 .price { flex: none; max-width: 132px; text-align: right; }
 .price strong, .price small { display: block; }
 .price strong { font-size: 16px; font-weight: 600; white-space: nowrap; }
 .price small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.fit-badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
-.fit-badges span { padding: 6px 10px; border-radius: 9999px; background: var(--surface-soft); color: var(--body); font-size: 11px; font-weight: 500; }
+.fit-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.fit-badges span { padding: 5px 9px; border-radius: 9999px; background: var(--surface-soft); color: var(--body); font-size: 11px; font-weight: 500; }
 .fit-badges span.highlight { color: var(--ink); background: var(--surface-strong); }
 .fit-badges span.budget-ok { color: #0f6b3f; background: #e8f6ee; }
 .fit-badges span.budget-over { color: var(--error); background: #fdeeea; }
-.recommendation-reason { margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--surface-soft); color: var(--body); font-size: 12px; line-height: 1.55; }
-.recommendation-reason strong { color: var(--ink); font-weight: 600; }
-.card-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; color: var(--muted); font-size: 11px; }
+.card-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; color: var(--muted); font-size: 11px; }
 .card-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-footer a { flex: none; color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -416,7 +448,7 @@ kbd { padding: 3px 6px; border: 1px solid var(--hairline); border-bottom-width: 
   #setup-view.active { grid-template-columns: 1fr; padding-top: 48px; }
   .setup-copy { max-width: 680px; }
   .condition-panel { max-width: none; justify-self: stretch; }
-  .deck-layout { grid-template-columns: minmax(380px, 520px); }
+  .deck-layout { grid-template-columns: minmax(380px, 680px); }
   .criteria-sidebar { display: none; }
 }
 
@@ -438,9 +470,14 @@ kbd { padding: 3px 6px; border: 1px solid var(--hairline); border-bottom-width: 
   .deck-topbar h2 { max-width: 240px; }
   .progress-wrap { width: 92px; }
   .deck-layout { display: block; }
-  .deck-stage { height: 540px; }
-  .food-visual { height: 220px; }
-  .card-body { padding: 20px; }
+  .deck-stage { min-height: 460px; }
+  /* 좁은 화면에서도 두 곳을 나란히 두어야 비교가 됩니다. 대신 여백과 글자를 줄입니다. */
+  .card-pair { gap: 10px; }
+  .food-visual { height: 116px; }
+  .food-emoji { font-size: 50px; }
+  .card-body { padding: 13px; }
+  .card-title-row { flex-direction: column; gap: 6px; }
+  .price { max-width: none; text-align: left; }
   .keyboard-guide span { display: none; }
   #result-view { padding: 32px 16px 48px; }
   .chosen-card { grid-template-columns: 1fr; }
@@ -453,12 +490,16 @@ kbd { padding: 3px 6px; border: 1px solid var(--hairline); border-bottom-width: 
 @media (max-width: 430px) {
   .brand { font-size: 18px; }
   .brand-mark { width: 32px; height: 32px; }
-  .deck-stage { height: 530px; }
-  .food-visual { height: 205px; }
-  .food-emoji { font-size: 88px; }
-  .card-title-row h3 { font-size: 20px; }
-  .fit-badges { margin: 14px 0; }
-  .recommendation-reason { font-size: 11px; }
+  .deck-stage { min-height: 430px; }
+  .food-visual { height: 100px; }
+  .food-emoji { font-size: 42px; }
+  .card-title-row h3 { font-size: 15px; }
+  .category { font-size: 12px; }
+  .price strong { font-size: 14px; }
+  .fit-badges { gap: 5px; margin: 10px 0; }
+  .card-footer > span { display: none; }
+  .card-footer { justify-content: flex-end; }
+  .pick-cta { margin-top: 10px; padding: 9px; font-size: 12px; }
   .chosen-links .kakao-detail-button { width: 100%; justify-content: center; }
 }
 

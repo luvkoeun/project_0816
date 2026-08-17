@@ -18,6 +18,9 @@ create table if not exists public.sessions (
   radius_m         integer     not null,
   cuisines         text[]      not null,
   location_source  text        not null check (location_source in ('gps', 'manual')),
+  -- 추천 방식. single = 한 곳씩, pair = 두 곳씩 보여주고 고르게 하는 버전.
+  -- 같은 표에 쌓되 이 값으로 나눠 봅니다.
+  variant          text        not null default 'single' check (variant in ('single', 'pair')),
   app_version      text
 );
 
@@ -29,8 +32,9 @@ create table if not exists public.swipes (
   session_id       uuid        not null references public.sessions(id) on delete cascade,
   created_at       timestamptz not null default now(),
   deck_index       integer     not null,   -- 덱에서 몇 번째 카드였는지 (0부터)
+  pair_position    integer,                -- pair 버전에서 0 = 왼쪽, 1 = 오른쪽
   action           text        not null check (action in ('pass', 'choose')),
-  input            text        not null check (input in ('drag', 'button', 'keyboard')),
+  input            text        not null check (input in ('drag', 'button', 'keyboard', 'card')),
   restaurant_id    text,
   restaurant_name  text,
   cuisine          text,
@@ -50,10 +54,12 @@ create table if not exists public.picks (
   session_id       uuid        not null references public.sessions(id) on delete cascade,
   created_at       timestamptz not null default now(),
   swipes_before    integer     not null,   -- 고르기 전까지 넘긴 횟수
+  cards_seen       integer,                -- 고르기까지 실제로 본 식당 수 (버전 간 비교용)
   deck_index       integer     not null,
+  pair_position    integer,                -- pair 버전에서 0 = 왼쪽, 1 = 오른쪽
   deck_size        integer     not null,
   decision_ms      integer     not null,   -- 검색 완료부터 선택까지 걸린 시간
-  input            text        not null check (input in ('drag', 'button', 'keyboard')),
+  input            text        not null check (input in ('drag', 'button', 'keyboard', 'card')),
   restaurant_id    text,
   restaurant_name  text,
   cuisine          text,
@@ -109,6 +115,7 @@ create or replace view public.session_summary
 select
   s.id                as session_id,
   s.created_at,
+  s.variant,
   s.deck_size,
   s.budget,
   s.time_limit,
@@ -116,7 +123,10 @@ select
   s.cuisines,
   s.location_source,
   p.swipes_before,
+  p.cards_seen,
+  p.pair_position,
   p.decision_ms,
+  p.input             as pick_input,
   p.restaurant_name   as picked_name,
   p.cuisine           as picked_cuisine,
   p.price             as picked_price,

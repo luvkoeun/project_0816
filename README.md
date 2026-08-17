@@ -22,8 +22,11 @@ python -m http.server 4173
 
 ## 사용 방법
 
-- `←` 키 또는 왼쪽 스와이프: 다음 식당
-- `→` 키 또는 오른쪽 스와이프: 현재 식당 즉시 선택
+한 번에 **두 곳**을 나란히 보여줍니다. 둘 중 하나를 고르거나, 둘 다 넘기고 다른 두 곳을 봅니다.
+
+- **카드 클릭**: 그 식당으로 결정
+- `1` / `2` 키: 왼쪽 / 오른쪽 선택
+- `←` `→` 키 또는 **좌우 스와이프**: 두 곳 모두 넘기고 다른 두 곳
 - 선택 화면: 카카오맵에서 식당의 메뉴·가격과 정확한 위치를 확인하거나 길찾기
 
 ## 장소 데이터
@@ -100,10 +103,31 @@ Vercel 프로젝트 > **Settings > Environment Variables** 에 두 개를 추가
 
 | 표 | 언제 | 핵심 컬럼 |
 | --- | --- | --- |
-| `sessions` | 검색 한 번마다 | `deck_size`(뜬 식당 수), 예산·시간·메뉴 조건 |
-| `swipes` | 카드를 넘기거나 고를 때마다 | `deck_index`, `action`, `input`(드래그/버튼/키보드) |
-| `picks` | 선택을 누를 때 | **`swipes_before`(몇 번 넘기고 골랐는지)**, `decision_ms` |
+| `sessions` | 검색 한 번마다 | `deck_size`(뜬 식당 수), `variant`(추천 방식), 예산·시간·메뉴 조건 |
+| `swipes` | 카드를 넘기거나 고를 때마다 | `deck_index`, `pair_position`, `action`, `input` |
+| `picks` | 선택할 때 | **`swipes_before`**, **`cards_seen`**, `pair_position`, `decision_ms` |
 | `feedback` | 만족도를 저장할 때 | `rating`, `tags` |
+
+### 버전 비교 (single / pair)
+
+추천 방식을 바꿔도 표를 새로 만들지 않습니다. `sessions.variant` 로 구분해 같은 표에 쌓고, 질의에서 나눠 봅니다.
+
+- `single` — 한 곳씩 보여주고 좌우로 넘기던 이전 방식
+- `pair` — 두 곳을 나란히 보여주고 눌러서 고르는 현재 방식
+
+넘긴 횟수(`swipes_before`)는 두 방식의 의미가 다릅니다. pair 는 한 번 넘길 때 두 곳이 사라지니까요. 그래서 **고르기까지 실제로 본 식당 수(`cards_seen`)** 를 따로 남깁니다. 이 값이 두 방식을 같은 잣대로 비교할 수 있는 지표입니다.
+
+```sql
+select variant,
+       count(*)                                                    as 검색수,
+       round(100.0 * count(*) filter (where picked) / count(*), 1) as 선택률,
+       round(avg(cards_seen) filter (where picked), 1)             as 평균_본식당수,
+       round(avg(decision_ms) filter (where picked) / 1000.0, 1)   as 평균_초
+from public.session_summary
+group by variant order by variant;
+```
+
+이미 `schema.sql` 을 실행한 프로젝트라면 [`supabase/migration-01-pair.sql`](./supabase/migration-01-pair.sql) 을 한 번 실행하세요. 기존 기록은 자동으로 `variant = 'single'` 이 되어 그대로 보존됩니다. 새로 만드는 프로젝트는 `schema.sql` 하나면 됩니다.
 
 가장 궁금한 값은 한 줄로 나옵니다.
 

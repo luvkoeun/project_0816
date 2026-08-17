@@ -4,7 +4,10 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const USAGE_KEY = "hankkipick_usage_v2";
-  const SERVICE_VERSION = "v3-airbnb-map-link";
+  const SERVICE_VERSION = "v4-pair-cards";
+  // 한 번에 몇 곳을 보여주는지. DB에는 variant 로 기록해 이전 버전과 나눠 볼 수 있게 합니다.
+  const PAIR_SIZE = 2;
+  const VARIANT = "pair";
   const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
   const WIKIDATA_ENDPOINT = "https://www.wikidata.org/w/api.php";
   const COMMONS_FILE_URL = "https://commons.wikimedia.org/wiki/Special:FilePath/";
@@ -889,6 +892,7 @@
         radius_m: searchRadius(),
         cuisines: state.criteria.cuisines,
         location_source: state.location.source,
+        variant: VARIANT,
         app_version: SERVICE_VERSION,
       });
       renderCriteria();
@@ -933,19 +937,16 @@
     });
   }
 
-  function cardMarkup(restaurant, stackIndex) {
-    const isActive = stackIndex === 0;
+  function cardMarkup(restaurant, position) {
     const preferred = state.criteria.cuisines.includes(restaurant.cuisine);
     const affordable = withinBudget(restaurant);
-    const priceBasis = restaurant.priceFromName ? "대표메뉴 시세" : "이 업종 평균 시세";
     return `
-      <article class="restaurant-card ${isActive ? "active-card" : `stack-${stackIndex}`}" data-id="${escapeHTML(restaurant.id)}" style="--card-color:${restaurant.color}" ${isActive ? 'tabindex="0"' : 'aria-hidden="true"'}>
+      <article class="restaurant-card" data-id="${escapeHTML(restaurant.id)}" data-position="${position}" style="--card-color:${restaurant.color}" tabindex="0" role="button" aria-label="${escapeHTML(restaurant.name)} 선택하기">
         <div class="food-visual">
-          <span class="source-badge">OPENSTREETMAP · 실제 장소</span>
+          <span class="pick-hint">${position + 1}</span>
           ${photoMarkup(restaurant, "food-photo")}
           <span class="food-emoji" aria-hidden="true">${restaurant.emoji}</span>
           ${restaurant.photoCredit ? `<span class="photo-credit">사진 · ${escapeHTML(restaurant.photoCredit)}</span>` : ""}
-          <span class="swipe-label pass">NEXT</span><span class="swipe-label like">PICK</span>
         </div>
         <div class="card-body">
           <div class="card-title-row">
@@ -953,37 +954,43 @@
             <div class="price"><strong>${formatPrice(restaurant.price)}</strong><small>${escapeHTML(restaurant.menu)} 예상</small></div>
           </div>
           <div class="fit-badges">
-            <span class="highlight">${restaurant.distance.toLocaleString("ko-KR")}m · 도보 약 ${restaurant.walkMinutes}분</span>
+            <span class="highlight">${restaurant.distance.toLocaleString("ko-KR")}m · 도보 ${restaurant.walkMinutes}분</span>
             <span class="${affordable ? "budget-ok" : "budget-over"}">${affordable ? "예산 내" : "예산 초과"}</span>
-            ${preferred ? `<span>${escapeHTML(restaurant.cuisine)} 취향 일치</span>` : ""}
-            <span>${escapeHTML(displayPhone(restaurant.phone))}</span>
+            ${preferred ? `<span>${escapeHTML(restaurant.cuisine)} 취향</span>` : ""}
           </div>
-          <p class="recommendation-reason"><strong>${escapeHTML(restaurant.menu)} 기준 약 ${formatPrice(restaurant.price)}</strong><br />${priceBasis}로 계산한 값이라 실제 가격과 다를 수 있어요. 카카오맵에서 메뉴판을 확인해보세요.</p>
-          <div class="card-footer"><span>${escapeHTML(displayAddress(restaurant.address))}</span><a href="${kakaoMapUrl(restaurant)}" target="_blank" rel="noopener">메뉴·가격 확인 ↗</a></div>
+          <div class="card-footer">
+            <span>${escapeHTML(displayAddress(restaurant.address))}</span>
+            <a href="${kakaoMapUrl(restaurant)}" target="_blank" rel="noopener">메뉴·가격 ↗</a>
+          </div>
+          <span class="pick-cta">이 식당으로 결정 →</span>
         </div>
       </article>`;
   }
 
+  function currentPair() {
+    return state.deck.slice(state.index, state.index + PAIR_SIZE);
+  }
+
   function renderDeck() {
     const total = state.deck.length;
-    $("#deck-progress-label").textContent = state.index >= total ? "모두 확인했어요" : `${state.index + 1} / ${total}`;
-    $("#deck-progress-bar").style.width = `${total ? Math.min(100, ((state.index + 1) / total) * 100) : 0}%`;
+    const pair = currentPair();
+    const shown = Math.min(total, state.index + pair.length);
+    $("#deck-progress-label").textContent = state.index >= total ? "모두 확인했어요" : `${shown} / ${total}`;
+    $("#deck-progress-bar").style.width = `${total ? Math.min(100, (shown / total) * 100) : 0}%`;
 
-    if (state.index >= total) {
+    if (!pair.length) {
       renderDeckComplete();
       $("#swipe-controls").hidden = true;
       return;
     }
 
     $("#swipe-controls").hidden = false;
-    const cards = [];
-    for (let offset = 2; offset >= 0; offset -= 1) {
-      const restaurant = state.deck[state.index + offset];
-      if (restaurant) cards.push(cardMarkup(restaurant, offset));
-    }
-    $("#deck-stage").innerHTML = cards.join("");
+    $("#deck-stage").innerHTML = `
+      <div class="card-pair${pair.length === 1 ? " single" : ""}" id="card-pair">
+        ${pair.map((restaurant, position) => cardMarkup(restaurant, position)).join("")}
+      </div>`;
     bindPhotoFallback($("#deck-stage"));
-    attachSwipeGesture($(".active-card", $("#deck-stage")));
+    attachPairGestures($("#card-pair"));
   }
 
   function renderDeckComplete() {
@@ -991,6 +998,7 @@
       <div class="deck-complete">
         <span>🍽️</span>
         <h3>주변 식당을 모두 봤어요</h3>
+        <p class="deck-complete-note">한 곳도 고르지 않으셨네요.</p>
         <p>같은 조건으로 처음부터 다시 보거나 조건을 넓혀 검색할 수 있어요.</p>
         <div class="choice-list">
           <button class="primary-button" id="replay-deck" type="button"><span>처음부터 다시 보기</span><span>↻</span></button>
@@ -1004,8 +1012,9 @@
     $("#change-conditions").addEventListener("click", returnToSetup);
   }
 
-  function attachSwipeGesture(card) {
-    if (!card) return;
+  // 두 장을 한 묶음으로 다룹니다. 밀면 두 곳 모두 넘기고, 카드를 누르면 그 곳으로 정합니다.
+  function attachPairGestures(pair) {
+    if (!pair) return;
     let startX = 0;
     let startY = 0;
     let dx = 0;
@@ -1013,34 +1022,32 @@
     let pressing = false;
     let captured = false;
 
-    card.addEventListener("pointerdown", (event) => {
+    pair.addEventListener("pointerdown", (event) => {
       if (state.animating) return;
-      // 링크 위에서 시작한 누름은 드래그로 보지 않습니다. 카드가 포인터를 가로채면
-      // 브라우저가 click을 카드로 돌려버려서 링크가 열리지 않습니다.
-      if (event.target.closest("a, button")) return;
+      // 링크 위에서 시작한 누름은 드래그로 보지 않습니다. 포인터를 가로채면
+      // 브라우저가 click을 이쪽으로 돌려버려서 링크가 열리지 않습니다.
+      if (event.target.closest("a")) return;
       pointerId = event.pointerId;
       pressing = true;
       startX = event.clientX;
       startY = event.clientY;
     });
 
-    card.addEventListener("pointermove", (event) => {
+    pair.addEventListener("pointermove", (event) => {
       if (!pressing || event.pointerId !== pointerId) return;
       dx = event.clientX - startX;
       const dy = event.clientY - startY;
 
-      // 실제로 움직인 뒤에야 포인터를 가져옵니다. 그래야 살짝 눌렀다 떼는 조작이 클릭으로 남습니다.
+      // 실제로 움직인 뒤에야 포인터를 가져옵니다. 그래야 짧게 누르는 동작이 클릭으로 남습니다.
       if (!captured) {
         if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
         captured = true;
         state.dragging = true;
-        card.setPointerCapture(pointerId);
-        card.style.transition = "none";
+        pair.setPointerCapture(pointerId);
+        pair.style.transition = "none";
       }
-
-      card.style.transform = `translate(${dx}px, ${dy * .18}px) rotate(${dx / 20}deg)`;
-      $(".swipe-label.like", card).style.opacity = Math.max(0, Math.min(1, dx / 100));
-      $(".swipe-label.pass", card).style.opacity = Math.max(0, Math.min(1, -dx / 100));
+      pair.style.transform = `translate(${dx}px, ${dy * .12}px) rotate(${dx / 60}deg)`;
+      pair.style.opacity = `${Math.max(.35, 1 - Math.abs(dx) / 320)}`;
     });
 
     const release = () => {
@@ -1051,71 +1058,111 @@
       state.dragging = false;
       pointerId = null;
 
-      // 움직이지 않았다면 카드를 건드리지 않고 클릭이 그대로 진행되게 둡니다.
       if (!dragged) {
         dx = 0;
-        return;
+        return; // 움직이지 않았으면 클릭이 그대로 진행되게 둡니다.
       }
 
-      card.style.transition = "";
+      pair.style.transition = "";
       if (Math.abs(dx) >= 85) {
-        swipeDecision(dx > 0 ? "choose" : "pass", "drag");
+        passPair("drag", dx > 0 ? 1 : -1);
       } else {
-        card.style.transform = "";
-        $(".swipe-label.like", card).style.opacity = "";
-        $(".swipe-label.pass", card).style.opacity = "";
+        pair.style.transform = "";
+        pair.style.opacity = "";
       }
       dx = 0;
     };
-    card.addEventListener("pointerup", release);
-    card.addEventListener("pointercancel", release);
-  }
+    pair.addEventListener("pointerup", release);
+    pair.addEventListener("pointercancel", release);
 
-  function swipeDecision(action, input = "button") {
-    if (state.animating || state.index >= state.deck.length) return;
-    const restaurant = state.deck[state.index];
-    const card = $(".active-card", $("#deck-stage"));
-    state.animating = true;
-    card?.classList.add(action === "choose" ? "fly-right" : "fly-left");
-
-    queueRow("swipes", {
-      session_id: state.sessionId,
-      deck_index: state.index,
-      action,
-      input,
-      ...restaurantColumns(restaurant),
+    pair.addEventListener("click", (event) => {
+      if (event.target.closest("a")) return; // 지도 링크는 선택으로 치지 않습니다.
+      const card = event.target.closest(".restaurant-card");
+      if (card) choosePair(Number(card.dataset.position), "card");
     });
 
-    if (action === "pass") {
+    pair.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const card = event.target.closest(".restaurant-card");
+      if (!card) return;
+      event.preventDefault();
+      choosePair(Number(card.dataset.position), "keyboard");
+    });
+  }
+
+  // 넘긴 두 곳을 각각 한 줄씩 남깁니다. 어떤 조합에서 넘어갔는지 보려면 둘 다 필요합니다.
+  function passPair(input = "button", direction = -1) {
+    if (state.animating) return;
+    const pair = currentPair();
+    if (!pair.length) return;
+
+    state.animating = true;
+    $("#card-pair")?.classList.add(direction > 0 ? "fly-right" : "fly-left");
+
+    pair.forEach((restaurant, position) => {
+      queueRow("swipes", {
+        session_id: state.sessionId,
+        deck_index: state.index + position,
+        pair_position: position,
+        action: "pass",
+        input,
+        ...restaurantColumns(restaurant),
+      });
       usage.passes += 1;
-      state.swipes += 1;
       recordEvent("restaurant_passed", { restaurantId: restaurant.id, input });
-      setTimeout(() => {
-        state.index += 1;
-        state.animating = false;
-        renderDeck();
-      }, 260);
-      return;
-    }
+    });
+
+    state.swipes += 1;
+    setTimeout(() => {
+      state.index += pair.length;
+      state.animating = false;
+      renderDeck();
+    }, 260);
+  }
+
+  function choosePair(position, input = "card") {
+    if (state.animating || !Number.isInteger(position)) return;
+    const pair = currentPair();
+    const restaurant = pair[position];
+    if (!restaurant) return;
+
+    state.animating = true;
+    $$(".restaurant-card", $("#deck-stage")).forEach((card, index) => {
+      card.classList.add(index === position ? "card-chosen" : "card-dropped");
+    });
 
     usage.selections += 1;
     state.chosen = restaurant;
     const decisionMs = Date.now() - state.startedAt;
+
+    queueRow("swipes", {
+      session_id: state.sessionId,
+      deck_index: state.index + position,
+      pair_position: position,
+      action: "choose",
+      input,
+      ...restaurantColumns(restaurant),
+    });
     recordEvent("restaurant_selected", { restaurantId: restaurant.id, input, decisionMs });
     queueRow("picks", {
       session_id: state.sessionId,
       swipes_before: state.swipes,
-      deck_index: state.index,
+      deck_index: state.index + position,
+      pair_position: position,
+      // 두 곳씩 보여주면 넘긴 횟수만으로는 예전 버전과 비교가 안 됩니다.
+      // 고르기까지 실제로 본 식당 수를 따로 남겨 두 버전을 같은 잣대로 봅니다.
+      cards_seen: state.index + position + 1,
       deck_size: state.deck.length,
       decision_ms: decisionMs,
       input,
       ...restaurantColumns(restaurant),
     });
+
     setTimeout(() => {
       state.animating = false;
       renderResult();
       switchView("result-view");
-    }, 260);
+    }, 280);
   }
 
   function renderResult() {
@@ -1189,8 +1236,7 @@
       if (button) chooseLocationResult(Number(button.dataset.index));
     });
     $("#condition-form").addEventListener("submit", startSession);
-    $("#pass-button").addEventListener("click", () => swipeDecision("pass", "button"));
-    $("#like-button").addEventListener("click", () => swipeDecision("choose", "button"));
+    $("#pass-button").addEventListener("click", () => passPair("button"));
     $("#restart-setup").addEventListener("click", returnToSetup);
     $("#new-session").addEventListener("click", returnToSetup);
     $("#home-link").addEventListener("click", (event) => { event.preventDefault(); returnToSetup(); });
@@ -1205,8 +1251,11 @@
     $("#save-feedback").addEventListener("click", saveFeedback);
     document.addEventListener("keydown", (event) => {
       if (!$("#deck-view").classList.contains("active")) return;
-      if (event.key === "ArrowLeft") { event.preventDefault(); swipeDecision("pass", "keyboard"); }
-      if (event.key === "ArrowRight") { event.preventDefault(); swipeDecision("choose", "keyboard"); }
+      // 좌우는 두 곳 모두 넘기고, 1·2 는 왼쪽·오른쪽 선택입니다.
+      if (event.key === "ArrowLeft") { event.preventDefault(); passPair("keyboard", -1); }
+      if (event.key === "ArrowRight") { event.preventDefault(); passPair("keyboard", 1); }
+      if (event.key === "1") { event.preventDefault(); choosePair(0, "keyboard"); }
+      if (event.key === "2") { event.preventDefault(); choosePair(1, "keyboard"); }
     });
   }
 
