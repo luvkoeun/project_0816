@@ -29,16 +29,34 @@ update public.picks
  where cards_seen is null;
 
 -- 4. 카드를 눌러 고르는 방식이 생겨 input 에 'card' 를 허용합니다.
-alter table public.swipes drop constraint if exists swipes_input_check;
+--    제약 이름이 환경마다 다를 수 있어, 이름으로 찾지 않고 정의 내용으로 찾아 지웁니다.
+--    이름만 보고 지우면 못 찾고 넘어가서 옛 제약이 남고, 'card' 가 계속 거절됩니다.
+do $$
+declare c record;
+begin
+  for c in
+    select conrelid::regclass::text as tbl, conname
+      from pg_constraint
+     where contype = 'c'
+       and conrelid in ('public.swipes'::regclass, 'public.picks'::regclass)
+       and pg_get_constraintdef(oid) ilike '%input%'
+  loop
+    execute format('alter table %s drop constraint %I', c.tbl, c.conname);
+  end loop;
+end $$;
+
 alter table public.swipes
   add constraint swipes_input_check check (input in ('drag', 'button', 'keyboard', 'card'));
-
-alter table public.picks drop constraint if exists picks_input_check;
 alter table public.picks
   add constraint picks_input_check check (input in ('drag', 'button', 'keyboard', 'card'));
 
--- 5. 뷰에 variant 와 새 컬럼을 넣어 다시 만듭니다.
-create or replace view public.session_summary
+-- 5. 뷰를 다시 만듭니다.
+--    create or replace view 는 기존 컬럼의 이름과 순서를 바꿀 수 없고 뒤에 덧붙이는 것만
+--    됩니다. variant 를 중간에 끼워 넣으므로 반드시 지우고 새로 만들어야 합니다.
+--    뷰에는 데이터가 없어 지워도 잃는 것이 없습니다.
+drop view if exists public.session_summary;
+
+create view public.session_summary
   with (security_invoker = on) as
 select
   s.id                as session_id,

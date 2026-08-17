@@ -110,7 +110,11 @@ create policy "anon inserts feedback" on public.feedback
 -- ---------------------------------------------------------------------------
 -- 6. 분석용 뷰. security_invoker 를 켜서 뷰로 RLS를 우회하지 못하게 합니다.
 -- ---------------------------------------------------------------------------
-create or replace view public.session_summary
+-- create or replace 는 기존 뷰의 컬럼 순서를 바꿀 수 없어, 예전 버전 위에 다시 실행하면
+-- 실패합니다. 뷰에는 데이터가 없으므로 지우고 새로 만듭니다.
+drop view if exists public.session_summary;
+
+create view public.session_summary
   with (security_invoker = on) as
 select
   s.id                as session_id,
