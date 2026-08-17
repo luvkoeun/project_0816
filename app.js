@@ -644,7 +644,8 @@
   const DUPLICATE_RADIUS_M = 200;
   const DECK_SIZE = 30;
   const MAX_SAME_CUISINE_RUN = 2;
-  const DRAG_THRESHOLD_PX = 6;
+  const DRAG_THRESHOLD_PX = 6;   // 이만큼 움직여야 클릭이 아니라 드래그로 봅니다.
+  const SWIPE_DISTANCE_PX = 70;  // 이만큼 밀면 넘어갑니다.
 
   function nameKeyOf(name) {
     return String(name).toLowerCase().replace(/[\s·.,'"`()\[\]\-_&]/g, "");
@@ -922,7 +923,9 @@
 
   function photoMarkup(restaurant, className) {
     if (!restaurant.photoUrl) return "";
-    return `<img class="${className}" src="${escapeHTML(restaurant.photoUrl)}" alt="${escapeHTML(restaurant.name)} 사진" loading="lazy" referrerpolicy="no-referrer" />`;
+    // draggable="false" 가 없으면 사진 위에서 시작한 드래그가 브라우저 기본
+    // 이미지 끌기로 넘어가면서 pointercancel 이 떨어지고 스와이프가 끊깁니다.
+    return `<img class="${className}" src="${escapeHTML(restaurant.photoUrl)}" alt="${escapeHTML(restaurant.name)} 사진" loading="lazy" draggable="false" referrerpolicy="no-referrer" />`;
   }
 
   // 이미지가 실제로 뜬 뒤에만 이모지 대신 사진을 보여주고, 깨지면 조용히 되돌립니다.
@@ -988,9 +991,9 @@
     $("#deck-stage").innerHTML = `
       <div class="card-pair${pair.length === 1 ? " single" : ""}" id="card-pair">
         ${pair.map((restaurant, position) => cardMarkup(restaurant, position)).join("")}
-      </div>`;
+      </div>
+      <span class="swipe-hint" id="swipe-hint" aria-hidden="true">다른 두 곳 보기</span>`;
     bindPhotoFallback($("#deck-stage"));
-    attachPairGestures($("#card-pair"));
   }
 
   function renderDeckComplete() {
@@ -1012,9 +1015,32 @@
     $("#change-conditions").addEventListener("click", returnToSetup);
   }
 
-  // 두 장을 한 묶음으로 다룹니다. 밀면 두 곳 모두 넘기고, 카드를 누르면 그 곳으로 정합니다.
-  function attachPairGestures(pair) {
+  function resetPairTransform() {
+    const pair = $("#card-pair");
+    if (pair) {
+      pair.style.transition = "";
+      pair.style.transform = "";
+      pair.style.opacity = "";
+    }
+    const hint = $("#swipe-hint");
+    if (hint) hint.style.opacity = "";
+  }
+
+  // 드래그로 밀어낸 자리에서 이어서 날아가도록 인라인 스타일로 애니메이션합니다.
+  // 클래스로 하면 드래그가 남긴 인라인 transform 이 우선해서 재생되지 않습니다.
+  function flyOutPair(direction) {
+    const pair = $("#card-pair");
     if (!pair) return;
+    pair.style.transition = "transform .26s ease, opacity .26s ease";
+    pair.style.transform = `translate(${direction * 55}%, 26px) rotate(${direction * 4}deg)`;
+    pair.style.opacity = "0";
+  }
+
+  // 카드 위뿐 아니라 덱 영역 어디를 밀어도 넘어가게 스테이지에 답니다.
+  // renderDeck 이 안쪽 HTML 을 통째로 갈아끼우므로 여기서 한 번만 답니다.
+  // 렌더할 때마다 달면 리스너가 계속 쌓입니다.
+  function bindDeckGestures() {
+    const stage = $("#deck-stage");
     let startX = 0;
     let startY = 0;
     let dx = 0;
@@ -1022,19 +1048,20 @@
     let pressing = false;
     let captured = false;
 
-    pair.addEventListener("pointerdown", (event) => {
-      if (state.animating) return;
-      // 링크 위에서 시작한 누름은 드래그로 보지 않습니다. 포인터를 가로채면
-      // 브라우저가 click을 이쪽으로 돌려버려서 링크가 열리지 않습니다.
-      if (event.target.closest("a")) return;
+    stage.addEventListener("pointerdown", (event) => {
+      if (state.animating || !$("#card-pair")) return;
+      // 링크와 버튼 위에서 시작한 누름은 드래그로 보지 않습니다.
+      if (event.target.closest("a, button")) return;
       pointerId = event.pointerId;
       pressing = true;
       startX = event.clientX;
       startY = event.clientY;
     });
 
-    pair.addEventListener("pointermove", (event) => {
+    stage.addEventListener("pointermove", (event) => {
       if (!pressing || event.pointerId !== pointerId) return;
+      const pair = $("#card-pair");
+      if (!pair) return;
       dx = event.clientX - startX;
       const dy = event.clientY - startY;
 
@@ -1043,45 +1070,46 @@
         if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
         captured = true;
         state.dragging = true;
-        pair.setPointerCapture(pointerId);
+        stage.setPointerCapture(pointerId);
         pair.style.transition = "none";
       }
-      pair.style.transform = `translate(${dx}px, ${dy * .12}px) rotate(${dx / 60}deg)`;
-      pair.style.opacity = `${Math.max(.35, 1 - Math.abs(dx) / 320)}`;
+
+      pair.style.transform = `translate(${dx}px, ${dy * .1}px) rotate(${dx / 70}deg)`;
+      pair.style.opacity = `${Math.max(.4, 1 - Math.abs(dx) / 340)}`;
+      const hint = $("#swipe-hint");
+      if (hint) hint.style.opacity = `${Math.min(1, Math.abs(dx) / SWIPE_DISTANCE_PX)}`;
     });
 
     const release = () => {
       if (!pressing) return;
       const dragged = captured;
+      const moved = dx;
       pressing = false;
       captured = false;
       state.dragging = false;
       pointerId = null;
-
-      if (!dragged) {
-        dx = 0;
-        return; // 움직이지 않았으면 클릭이 그대로 진행되게 둡니다.
-      }
-
-      pair.style.transition = "";
-      if (Math.abs(dx) >= 85) {
-        passPair("drag", dx > 0 ? 1 : -1);
-      } else {
-        pair.style.transform = "";
-        pair.style.opacity = "";
-      }
       dx = 0;
-    };
-    pair.addEventListener("pointerup", release);
-    pair.addEventListener("pointercancel", release);
 
-    pair.addEventListener("click", (event) => {
-      if (event.target.closest("a")) return; // 지도 링크는 선택으로 치지 않습니다.
+      // 움직이지 않았으면 손대지 않고 클릭이 그대로 진행되게 둡니다.
+      if (!dragged) return;
+      if (Math.abs(moved) >= SWIPE_DISTANCE_PX) {
+        passPair("drag", moved > 0 ? 1 : -1);
+      } else {
+        resetPairTransform();
+      }
+    };
+    stage.addEventListener("pointerup", release);
+    stage.addEventListener("pointercancel", release);
+
+    // 드래그 뒤에는 포인터 캡처 때문에 click 의 target 이 스테이지가 되어
+    // 아래 closest 가 비고, 밀다가 실수로 선택되는 일이 없습니다.
+    stage.addEventListener("click", (event) => {
+      if (event.target.closest("a, button")) return;
       const card = event.target.closest(".restaurant-card");
       if (card) choosePair(Number(card.dataset.position), "card");
     });
 
-    pair.addEventListener("keydown", (event) => {
+    stage.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       const card = event.target.closest(".restaurant-card");
       if (!card) return;
@@ -1097,7 +1125,7 @@
     if (!pair.length) return;
 
     state.animating = true;
-    $("#card-pair")?.classList.add(direction > 0 ? "fly-right" : "fly-left");
+    flyOutPair(direction);
 
     pair.forEach((restaurant, position) => {
       queueRow("swipes", {
@@ -1223,6 +1251,7 @@
 
   function bindEvents() {
     bindChoiceControls();
+    bindDeckGestures();
     $("#location-button").addEventListener("click", () => requestCurrentLocation().catch((error) => showError(error.message)));
     $("#location-search").addEventListener("click", searchLocation);
     $("#location-input").addEventListener("keydown", (event) => {
