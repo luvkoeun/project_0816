@@ -137,6 +137,22 @@ HankkiPick.exportUsage()  // 브라우저에 남은 기록 확인
 HankkiPick.clearUsage()   // 브라우저 기록 초기화
 ```
 
+### CSV 로 내려받기
+
+**가장 빠른 방법은 대시보드입니다.** SQL Editor 에서 원하는 질의를 실행하고 결과 위의 **Download CSV** 를 누르면 끝입니다. Table Editor 에서 표를 열고 우측 상단 **Export > Export as CSV** 도 됩니다.
+
+여러 표를 한 번에, 반복해서 받으려면 [`scripts/export-csv.py`](./scripts/export-csv.py) 를 쓰세요. 파이썬 표준 라이브러리만 쓰므로 설치할 것이 없습니다.
+
+```powershell
+$env:SUPABASE_URL = "https://<프로젝트>.supabase.co"
+$env:SUPABASE_SERVICE_KEY = "<service_role 키>"
+python scripts/export-csv.py
+```
+
+`export/<날짜>/` 아래에 `sessions.csv`, `swipes.csv`, `picks.csv`, `feedback.csv`, `session_summary.csv` 가 만들어집니다. 엑셀에서 한글이 깨지지 않도록 BOM 을 넣어 저장하고, `cuisines` 같은 배열 컬럼은 `한식; 일식` 형태로 펼칩니다. `export/` 는 `.gitignore` 에 있어 저장소에 올라가지 않습니다.
+
+> 읽기에는 **`service_role` 키**가 필요합니다. anon 키는 RLS 때문에 INSERT 만 되고 조회하면 빈 배열이 돌아옵니다. service_role 키는 DB 전체 권한을 가지므로 파일에 적어 커밋하지 말고 위처럼 환경변수로만 넘기세요.
+
 ### 기록이 안 쌓일 때
 
 배포한 사이트에서 F12 → Console 에 아래를 입력하면 원인을 짚어 줍니다.

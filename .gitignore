@@ -1,4 +1,6 @@
 .DS_Store
+# 내려받은 사용 기록 CSV — 저장소에 올리지 않습니다
+export/
 Thumbs.db
 *.log
 .tmp-*/
