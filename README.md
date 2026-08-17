@@ -165,6 +165,30 @@ delete from public.sessions where app_version = '__diagnostic__';
 
 장소 검색은 OpenStreetMap 데이터를 사용합니다. © OpenStreetMap contributors.
 
+## 검색 노출 (SEO)
+
+코드 쪽 준비는 되어 있습니다. `title`·`description`·canonical·Open Graph·JSON-LD 구조화 데이터와 [`robots.txt`](./robots.txt), [`sitemap.xml`](./sitemap.xml), 파비콘([`icon.svg`](./icon.svg))이 들어 있습니다.
+
+**남은 건 검색엔진에 등록하는 일이고, 이건 계정이 필요해서 직접 하셔야 합니다.**
+
+1. **Google Search Console** — [search.google.com/search-console](https://search.google.com/search-console) 에서 URL 접두어로 사이트 추가 → 소유권 확인(Vercel 배포는 HTML 태그 방식이 편합니다) → `sitemap.xml` 제출 → URL 검사에서 **색인 요청**
+2. **네이버 서치어드바이저** — [searchadvisor.naver.com](https://searchadvisor.naver.com) 에 사이트 등록 → 받은 확인 태그를 `index.html` 의 주석 자리에 붙이기 → 사이트맵 제출. 국내 검색은 네이버 비중이 커서 같이 하는 게 좋습니다
+3. **Bing 웹마스터 도구** (선택) — Search Console 에서 가져오기로 몇 번 클릭이면 끝납니다
+
+### 도메인을 연결하면
+
+주소가 네 곳에 하드코딩돼 있으니 함께 바꿔야 합니다.
+
+- `index.html` 의 `canonical`, `og:url`
+- `robots.txt` 의 `Sitemap:`
+- `sitemap.xml` 의 `<loc>`
+
+### 현실적인 기대치
+
+`점심메뉴추천` 은 배달 앱과 블로그가 이미 자리를 잡고 있는 경쟁이 심한 검색어입니다. 위 세팅은 **색인이 되기 위한 최소 조건**이지 상위 노출을 보장하지 않습니다. 색인 자체가 보통 며칠에서 몇 주 걸리고, 순위는 그 뒤 문제입니다.
+
+실제로 순위에 영향을 주는 것은 색인할 텍스트의 양과 외부 링크입니다. 지금은 한 페이지짜리 앱이라 크롤러가 읽을 내용이 첫 화면 문구뿐입니다. 노출을 늘리려면 `점심 메뉴 고르는 법` 같은 설명 페이지를 몇 개 두거나, 지역·메뉴별 페이지를 나누는 편이 태그를 더 손보는 것보다 효과가 큽니다.
+
 ## 디자인 시스템
 
 화면은 `DESIGN_AIRBNB.md`의 소비자 마켓플레이스 원칙을 한끼픽에 맞게 적용했습니다. 흰 캔버스, Rausch(`#ff385c`) 단일 포인트 컬러, Inter 폰트, pill 검색 영역, 14px 카드, 8px 버튼과 한 단계 그림자 체계를 사용합니다.
