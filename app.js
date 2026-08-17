@@ -64,8 +64,16 @@
   const supabaseConfig = window.HANKKIPICK_SUPABASE || {};
   const DIAGNOSTIC_TAG = "__diagnostic__";
 
-  // 환경변수에 끝 슬래시가 섞여 들어오면 //rest/v1 로 요청이 나가 404가 납니다.
-  const supabaseUrl = String(supabaseConfig.url || "").trim().replace(/\/+$/, "");
+  // 대시보드에서 값을 가져올 때 끝 슬래시나 /rest/v1 까지 함께 복사되는 경우가 많습니다.
+  // 그대로 두면 //rest/v1 이나 /rest/v1/rest/v1 로 요청이 나가 404가 납니다.
+  function normalizeSupabaseUrl(value) {
+    return String(value || "").trim()
+      .replace(/\/+$/, "")
+      .replace(/\/rest\/v1$/i, "")
+      .replace(/\/+$/, "");
+  }
+
+  const supabaseUrl = normalizeSupabaseUrl(supabaseConfig.url);
   const supabaseKey = String(supabaseConfig.anonKey || "").trim();
 
   function analyticsEnabled() {

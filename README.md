@@ -88,6 +88,8 @@ Vercel 프로젝트 > **Settings > Environment Variables** 에 두 개를 추가
 | `SUPABASE_URL` | `https://<프로젝트>.supabase.co` |
 | `SUPABASE_ANON_KEY` | anon public 키 |
 
+`SUPABASE_URL` 은 **Project URL** 입니다. 대시보드에 따라 `https://<프로젝트>.supabase.co/rest/v1` 처럼 REST 경로까지 보여주는 화면이 있는데, 그대로 붙여 넣어도 되도록 끝의 `/rest/v1` 과 슬래시는 자동으로 떼어냅니다.
+
 `NEXT_PUBLIC_` 접두사가 붙은 이름도 함께 인식합니다. 값을 바꾼 뒤에는 **재배포해야** 반영됩니다. 빌드 때 새로 굽는 값이라 기존 배포에는 옛 값이 남아 있습니다.
 
 빌드 로그에 `[supabase-config] 사용 기록 수집 켬 — https://...` 이 찍히면 정상입니다. 환경변수가 없으면 수집을 끈 채로 배포되고, 한쪽만 설정돼 있으면 실수로 보고 빌드를 실패시킵니다.

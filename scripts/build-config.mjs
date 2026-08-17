@@ -17,8 +17,14 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TARGET = join(ROOT, "supabase-config.js");
 
-// 끝 슬래시가 붙어 오면 요청이 //rest/v1 로 나가 404가 나므로 여기서 떼어 둡니다.
-const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim().replace(/\/+$/, "");
+const rawUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+
+// 대시보드에서 끝 슬래시나 /rest/v1 까지 함께 복사해 넣는 경우가 많습니다.
+// 그대로 두면 /rest/v1/rest/v1 로 요청이 나가 404가 나므로 여기서 정리합니다.
+const url = rawUrl
+  .replace(/\/+$/, "")
+  .replace(/\/rest\/v1$/i, "")
+  .replace(/\/+$/, "");
 const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
 function fail(message) {
@@ -48,6 +54,10 @@ assertPublishableKey(anonKey);
 
 if (Boolean(url) !== Boolean(anonKey)) {
   fail("SUPABASE_URL 과 SUPABASE_ANON_KEY 는 둘 다 설정해야 합니다. 지금은 한쪽만 들어와 있습니다.");
+}
+
+if (url && url !== rawUrl) {
+  console.log(`[supabase-config] URL 을 정리했습니다: ${rawUrl} -> ${url}`);
 }
 
 if (url && !/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(url)) {
